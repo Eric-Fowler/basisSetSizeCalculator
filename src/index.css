@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #0f172a;
+    color: #f1f5f9;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Angular-momentum badge colours */
+.am-s  { background-color: #6366f1; color: #fff; }
+.am-p  { background-color: #ec4899; color: #fff; }
+.am-d  { background-color: #f59e0b; color: #000; }
+.am-f  { background-color: #10b981; color: #fff; }
+.am-g  { background-color: #06b6d4; color: #fff; }
+.am-h  { background-color: #8b5cf6; color: #fff; }
+.am-i  { background-color: #ef4444; color: #fff; }
