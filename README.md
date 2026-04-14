@@ -36,3 +36,66 @@ Two output artifacts are produced:
 
 - [React](https://react.dev/) + [Vite](https://vite.dev/) — fast static build
 - [Tailwind CSS v4](https://tailwindcss.com/) — utility-first styling
+
+## Deploying to GitHub Pages
+
+To deploy this app to GitHub Pages:
+
+1. **Set the base path in Vite config**
+   
+   Edit `vite.config.js` and add the `base` option to match your repository name:
+   
+   ```js
+   // vite.config.js
+   export default defineConfig({
+     base: '/your-repo-name/', // <-- replace with your repo name
+     plugins: [react(), tailwindcss()],
+   })
+   ```
+
+2. **Build the site**
+   
+   ```bash
+   npm run build
+   ```
+   This creates a `dist/` folder with the static site.
+
+3. **Deploy to GitHub Pages**
+   
+   You can use the [gh-pages](https://www.npmjs.com/package/gh-pages) package or push manually:
+   
+   - Install gh-pages (if you want to automate):
+     ```bash
+     npm install --save-dev gh-pages
+     ```
+   - Add these scripts to your `package.json`:
+     ```json
+     "scripts": {
+       ...existing scripts...
+       "predeploy": "npm run build",
+       "deploy": "gh-pages -d dist"
+     }
+     ```
+   - Deploy:
+     ```bash
+     npm run deploy
+     ```
+   
+   Or, manually push `dist/` to a `gh-pages` branch:
+   ```bash
+   git checkout --orphan gh-pages
+   git --work-tree dist add --all
+   git --work-tree dist commit -m 'Deploy'
+   git push origin gh-pages --force
+   git checkout main
+   ```
+
+4. **Configure GitHub Pages**
+   
+   In your repository settings on GitHub, set Pages to deploy from the `gh-pages` branch (root).
+
+5. **Access your site**
+   
+   Visit `https://<your-username>.github.io/<your-repo-name>/` after a few minutes.
+
+For more details, see the [Vite deployment guide](https://vitejs.dev/guide/static-deploy.html#github-pages).
