@@ -143,8 +143,36 @@ os.makedirs(os.path.dirname(meta_path), exist_ok=True)
 os.makedirs(basis_dir, exist_ok=True)
 
 all_bs_names = bse.get_all_basis_names()
+all_bs_names_lower = {n.lower(): n for n in all_bs_names}
 orbital_bs = [b for b in all_bs_names if not is_auxiliary(b)]
 print(f'Processing {len(orbital_bs)} orbital basis sets…')
+
+# ── Auxiliary basis lookup helpers ────────────────────────────────────────────
+def find_aux_basis(orbital_name, suffix):
+    """Find a matching auxiliary basis by appending suffix (e.g. '-RIFIT', '-JKFIT')."""
+    candidate = f'{orbital_name}-{suffix}'.lower()
+    return all_bs_names_lower.get(candidate)
+
+def count_aux_functions(aux_name, element_zs):
+    """Count auxiliary basis functions per element (always spherical harmonics)."""
+    try:
+        raw_aux = bse.get_basis(aux_name)
+    except Exception:
+        return {}
+    result = {}
+    for z in element_zs:
+        z_str = str(z)
+        if z_str not in raw_aux.get('elements', {}):
+            continue
+        elem_data = raw_aux['elements'][z_str]
+        cf = count_functions(elem_data, spherical=True)
+        if cf['total_funcs'] > 0:
+            result[z] = cf['total_funcs']
+    return result
+
+# Pre-load the def2-universal-JKFIT fallback (Psi4's default for SCF DF)
+JKFIT_FALLBACK_NAME = 'def2-universal-JKFIT'
+print(f'Loading fallback JKFIT: {JKFIT_FALLBACK_NAME}')
 
 basis_meta = []
 
@@ -190,23 +218,54 @@ for idx, bs_name in enumerate(orbital_bs):
         print(f'  SKIP {bs_name}: no supported elements')
         continue
 
+    # ── Look up density-fitting auxiliary basis sets ──────────────────────────
+    element_zs = [d['z'] for d in elements_data.values()]
+
+    # RIFIT (correlation DF, e.g. RI-MP2)
+    rifit_name = find_aux_basis(bs_name, 'RIFIT')
+    rifit_funcs = count_aux_functions(rifit_name, element_zs) if rifit_name else {}
+
+    # JKFIT (SCF DF): try exact match first, fall back to def2-universal-JKFIT
+    jkfit_name = find_aux_basis(bs_name, 'JKFIT')
+    if jkfit_name:
+        jkfit_funcs = count_aux_functions(jkfit_name, element_zs)
+    else:
+        jkfit_name = JKFIT_FALLBACK_NAME
+        jkfit_funcs = count_aux_functions(JKFIT_FALLBACK_NAME, element_zs)
+
+    # Attach auxiliary function counts to element data
+    for sym, edata in elements_data.items():
+        z = edata['z']
+        if z in jkfit_funcs:
+            edata['aux_jkfit_funcs'] = jkfit_funcs[z]
+        if z in rifit_funcs:
+            edata['aux_rifit_funcs'] = rifit_funcs[z]
+
     # Write per-basis data file
     data_file = os.path.join(basis_dir, f'{idx}.json')
     with open(data_file, 'w') as f:
         json.dump(elements_data, f, separators=(',', ':'))
 
     supported_syms = sorted(elements_data.keys(), key=lambda s: SYMBOL_TO_Z.get(s, 999))
-    basis_meta.append({
+    meta_entry = {
         'id':               idx,
         'name':             bs_name,
         'family':           family,
         'description':      '',          # BSE doesn't expose free-text descriptions easily
         'elements':         supported_syms,
         'default_harmonic': default_harmonic,
-    })
+    }
+    if jkfit_name:
+        meta_entry['jkfit_basis'] = jkfit_name
+    if rifit_name:
+        meta_entry['rifit_basis'] = rifit_name
+    basis_meta.append(meta_entry)
 
     if idx % 50 == 0:
-        print(f'  [{idx}/{len(orbital_bs)}] {bs_name}: {len(elements_data)} elements, harmonic={default_harmonic}')
+        aux_info = []
+        if rifit_name: aux_info.append(f'RIFIT={rifit_name}')
+        if jkfit_name: aux_info.append(f'JKFIT={jkfit_name}')
+        print(f'  [{idx}/{len(orbital_bs)}] {bs_name}: {len(elements_data)} elements, harmonic={default_harmonic}, {", ".join(aux_info) or "no DF aux"}')
 
 # Add short descriptions for well-known basis sets
 DESCRIPTIONS = {
