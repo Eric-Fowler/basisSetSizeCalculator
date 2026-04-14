@@ -47,7 +47,7 @@ ELEMENT_SYMBOLS = {
 ELEMENT_NAMES = {
     1: 'Hydrogen', 2: 'Helium', 3: 'Lithium', 4: 'Beryllium', 5: 'Boron', 6: 'Carbon',
     7: 'Nitrogen', 8: 'Oxygen', 9: 'Fluorine', 10: 'Neon', 11: 'Sodium', 12: 'Magnesium',
-    13: 'Aluminum', 14: 'Silicon', 15: 'Phosphorus', 16: 'Sulfur', 17: 'Chlorine', 18: 'Argon',
+    13: 'Aluminium', 14: 'Silicon', 15: 'Phosphorus', 16: 'Sulfur', 17: 'Chlorine', 18: 'Argon',
     19: 'Potassium', 20: 'Calcium', 21: 'Scandium', 22: 'Titanium', 23: 'Vanadium',
     24: 'Chromium', 25: 'Manganese', 26: 'Iron', 27: 'Cobalt', 28: 'Nickel',
     29: 'Copper', 30: 'Zinc', 31: 'Gallium', 32: 'Germanium', 33: 'Arsenic',
@@ -55,6 +55,9 @@ ELEMENT_NAMES = {
 }
 
 AM_NAMES = {0: 's', 1: 'p', 2: 'd', 3: 'f', 4: 'g', 5: 'h', 6: 'i'}
+
+# Reverse lookup: element symbol → atomic number (used for sorting)
+SYMBOL_TO_Z = {sym: z for z, sym in ELEMENT_SYMBOLS.items()}
 
 def count_functions_for_element(elem_data, spherical=True):
     shells_detail = []
@@ -126,7 +129,7 @@ for bs_info in COMMON_BASIS_SETS:
         'name': bs_name,
         'family': bs_info['family'],
         'description': bs_info['description'],
-        'elements': sorted(elements_data.keys(), key=lambda s: ELEMENT_SYMBOLS.get(next(k for k,v in ELEMENT_SYMBOLS.items() if v==s), 999) if s in ELEMENT_SYMBOLS.values() else 999)
+        'elements': sorted(elements_data.keys(), key=lambda s: SYMBOL_TO_Z.get(s, 999))
     })
     print(f'  Done: {len(elements_data)} elements')
 

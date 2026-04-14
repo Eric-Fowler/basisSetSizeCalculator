@@ -41,28 +41,29 @@ export function parseMolecularFormula(formula) {
     }
   }
 
-  // Evaluate (handle nested parentheses with a stack)
-  function evaluate(toks, start = 0) {
+  // Evaluate tokens[start..end) — handle nested parentheses explicitly
+  function evaluate(toks, start = 0, end = toks.length) {
     const result = {}
     let j = start
-    while (j < toks.length) {
+    while (j < end) {
       const tok = toks[j]
       if (tok.type === 'element') {
         result[tok.symbol] = (result[tok.symbol] || 0) + tok.count
         j++
       } else if (tok.type === '(') {
-        // find matching )
+        // find matching ) using depth tracking
         let depth = 1
         let k = j + 1
-        while (k < toks.length && depth > 0) {
+        while (k < end && depth > 0) {
           if (toks[k].type === '(') depth++
           else if (toks[k].type === ')') depth--
           k++
         }
-        const inner = evaluate(toks, j + 1)
-        // multiplier after ')'
+        // k now points one past the matching ')', so matching ')' is at k-1
+        const inner = evaluate(toks, j + 1, k - 1)
+        // optional multiplier immediately after ')'
         let mult = 1
-        if (k < toks.length && toks[k].type === 'number') {
+        if (k < end && toks[k].type === 'number') {
           mult = toks[k].value
           k++
         }
@@ -70,8 +71,6 @@ export function parseMolecularFormula(formula) {
           result[sym] = (result[sym] || 0) + cnt * mult
         }
         j = k
-      } else if (tok.type === ')') {
-        break
       } else {
         j++
       }

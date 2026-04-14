@@ -11,7 +11,7 @@ const ALL_ELEMENTS = [
 const ELEMENT_NAMES = {
   H:'Hydrogen', He:'Helium', Li:'Lithium', Be:'Beryllium', B:'Boron',
   C:'Carbon', N:'Nitrogen', O:'Oxygen', F:'Fluorine', Ne:'Neon',
-  Na:'Sodium', Mg:'Magnesium', Al:'Aluminum', Si:'Silicon', P:'Phosphorus',
+  Na:'Sodium', Mg:'Magnesium', Al:'Aluminium', Si:'Silicon', P:'Phosphorus',
   S:'Sulfur', Cl:'Chlorine', Ar:'Argon', K:'Potassium', Ca:'Calcium',
   Sc:'Scandium', Ti:'Titanium', V:'Vanadium', Cr:'Chromium', Mn:'Manganese',
   Fe:'Iron', Co:'Cobalt', Ni:'Nickel', Cu:'Copper', Zn:'Zinc',
