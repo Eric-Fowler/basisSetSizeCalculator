@@ -239,10 +239,12 @@ for idx, bs_name in enumerate(orbital_bs):
         edata['aux_jkfit_funcs'] = jkfit_funcs.get(z)
         edata['aux_rifit_funcs'] = rifit_funcs.get(z)
 
-    # Write per-basis data file
+    # Write per-basis data file (schema_version at top level for forward-compat)
     data_file = os.path.join(basis_dir, f'{idx}.json')
+    output_data = {'schema_version': 2}
+    output_data.update(elements_data)
     with open(data_file, 'w') as f:
-        json.dump(elements_data, f, separators=(',', ':'))
+        json.dump(output_data, f, separators=(',', ':'))
 
     supported_syms = sorted(elements_data.keys(), key=lambda s: SYMBOL_TO_Z.get(s, 999))
     meta_entry = {
@@ -252,11 +254,9 @@ for idx, bs_name in enumerate(orbital_bs):
         'description':      '',          # BSE doesn't expose free-text descriptions easily
         'elements':         supported_syms,
         'default_harmonic': default_harmonic,
+        'jkfit_basis':      jkfit_name or None,
+        'rifit_basis':      rifit_name or None,
     }
-    if jkfit_name:
-        meta_entry['jkfit_basis'] = jkfit_name
-    if rifit_name:
-        meta_entry['rifit_basis'] = rifit_name
     basis_meta.append(meta_entry)
 
     if idx % 50 == 0:
