@@ -10,7 +10,6 @@ function AMBadge({ am }) {
 }
 
 function ShellRow({ shell, count, isLast }) {
-  const totalForAtomCount = shell.n_funcs * count
   return (
     <tr className={`${isLast ? '' : 'border-b border-slate-700/50'}`}>
       <td className="py-1.5 pr-3">
@@ -22,7 +21,7 @@ function ShellRow({ shell, count, isLast }) {
       <td className="py-1.5 px-2 text-right text-slate-400 text-sm">{shell.n_primitives}</td>
       <td className="py-1.5 px-2 text-right text-slate-300 text-sm font-semibold">{shell.n_contractions}</td>
       <td className="py-1.5 px-2 text-right text-slate-400 text-sm">{shell.n_funcs}</td>
-      <td className="py-1.5 pl-2 text-right text-indigo-300 text-sm font-semibold">{totalForAtomCount}</td>
+      <td className="py-1.5 pl-2 text-right text-indigo-300 text-sm font-semibold">{shell.n_funcs * count}</td>
     </tr>
   )
 }
@@ -34,7 +33,6 @@ function AtomCard({ symbol, name, count, elemData, spherical }) {
 
   return (
     <div className="rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-800 border-b border-slate-700">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-lg">
@@ -52,7 +50,6 @@ function AtomCard({ symbol, name, count, elemData, spherical }) {
         </div>
       </div>
 
-      {/* Shell table */}
       <div className="px-4 py-3 overflow-x-auto">
         <table className="w-full min-w-[420px]">
           <thead>
@@ -75,7 +72,7 @@ function AtomCard({ symbol, name, count, elemData, spherical }) {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t border-slate-600 mt-1">
+            <tr className="border-t border-slate-600">
               <td colSpan={3} className="pt-2 text-xs text-slate-500 font-medium">Total per atom</td>
               <td className="pt-2 px-2 text-right font-bold text-white">{funcs}</td>
               <td className="pt-2 pl-2 text-right font-bold text-indigo-300">{totalContrib}</td>
@@ -88,7 +85,6 @@ function AtomCard({ symbol, name, count, elemData, spherical }) {
 }
 
 function buildNotation(shells) {
-  // Summarise shells: e.g. [3s2p1d]
   const counts = {}
   for (const s of shells) {
     counts[s.am_name] = (counts[s.am_name] || 0) + s.n_contractions
@@ -97,6 +93,58 @@ function buildNotation(shells) {
   return '[' + order.filter(a => counts[a]).map(a => `${counts[a]}${a}`).join('') + ']'
 }
 
+// ─── Occupied / Virtual orbital stats ────────────────────────────────────────
+function OrbitalStats({ totalFuncs, atoms, basisData }) {
+  const totalElectrons = atoms.reduce((sum, { symbol, count }) => {
+    const z = basisData[symbol]?.z ?? 0
+    return sum + z * count
+  }, 0)
+
+  if (totalElectrons === 0) return null
+
+  const isOpenShell = totalElectrons % 2 !== 0
+  const nOcc = Math.floor(totalElectrons / 2)
+  const nVirt = totalFuncs - nOcc
+
+  return (
+    <div className="mt-4 pt-4 border-t border-indigo-800/50">
+      <div className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">
+        Orbital occupancy (neutral closed-shell RHF)
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {/* Electrons */}
+        <div className="flex-1 min-w-[90px] rounded-lg bg-slate-800/60 border border-slate-700 px-3 py-2 text-center">
+          <div className="text-lg font-bold text-slate-200 tabular-nums">{totalElectrons}</div>
+          <div className="text-xs text-slate-500">electrons</div>
+        </div>
+        {/* Occupied */}
+        <div className={`flex-1 min-w-[90px] rounded-lg border px-3 py-2 text-center
+          ${isOpenShell
+            ? 'bg-amber-900/30 border-amber-700/50'
+            : 'bg-teal-900/30 border-teal-700/50'}`}>
+          <div className={`text-lg font-bold tabular-nums ${isOpenShell ? 'text-amber-300' : 'text-teal-300'}`}>
+            {nOcc}
+          </div>
+          <div className={`text-xs ${isOpenShell ? 'text-amber-500' : 'text-teal-600'}`}>
+            {isOpenShell ? 'α occupied' : 'occupied'}
+          </div>
+        </div>
+        {/* Virtual */}
+        <div className="flex-1 min-w-[90px] rounded-lg bg-violet-900/30 border border-violet-700/50 px-3 py-2 text-center">
+          <div className="text-lg font-bold text-violet-300 tabular-nums">{nVirt}</div>
+          <div className="text-xs text-violet-600">virtual</div>
+        </div>
+      </div>
+      {isOpenShell && (
+        <p className="text-xs text-amber-400 mt-2">
+          ⚠ Odd electron count ({totalElectrons}e) — open-shell system. Counts assume UHF/ROHF α occupancy.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ─── Main export ─────────────────────────────────────────────────────────────
 export default function ResultsDisplay({ atoms, basisData, basisName, basisMeta, spherical, onToggleSpherical }) {
   if (!atoms.length) return null
 
@@ -123,8 +171,18 @@ export default function ResultsDisplay({ atoms, basisData, basisName, basisMeta,
           <div>
             <div className="text-sm text-indigo-300 font-medium mb-1">
               Basis: <span className="font-mono font-bold text-white">{basisName}</span>
+              {basisMeta?.default_harmonic && basisMeta.default_harmonic !== 'unspecified' && (
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-normal
+                  ${basisMeta.default_harmonic === 'spherical'
+                    ? 'bg-teal-900/50 text-teal-400'
+                    : 'bg-amber-900/50 text-amber-400'}`}>
+                  {basisMeta.default_harmonic === 'spherical' ? '5d 7f…' : '6d 10f…'} default
+                </span>
+              )}
             </div>
-            <div className="text-sm text-slate-400 mb-3">{basisMeta?.description}</div>
+            <div className="text-sm text-slate-400 mb-3">
+              {basisMeta?.description || basisMeta?.family}
+            </div>
             <div className="flex flex-wrap gap-2">
               {atoms.map(({ symbol, count }) => (
                 <span key={symbol} className="px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-200 text-sm font-mono">
@@ -139,6 +197,9 @@ export default function ResultsDisplay({ atoms, basisData, basisName, basisMeta,
             <div className="text-xs text-slate-500 mt-1">{totalPrimitives} primitives</div>
           </div>
         </div>
+
+        {/* Occupied / virtual stats */}
+        <OrbitalStats totalFuncs={totalFuncs} atoms={atoms} basisData={basisData} />
 
         {/* Spherical vs Cartesian toggle */}
         <div className="mt-4 pt-4 border-t border-indigo-800/50 flex items-center gap-3">

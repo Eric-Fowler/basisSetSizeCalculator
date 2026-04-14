@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import basisSetData from './data/basisSetData.json'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import basisSetMeta from './data/basisSetMeta.json'
 import BasisSetSelector from './components/BasisSetSelector'
 import AtomInput from './components/AtomInput'
 import ResultsDisplay from './components/ResultsDisplay'
@@ -20,18 +20,54 @@ export default function App() {
   const [formulaInput, setFormulaInput] = useState('')
   const [formulaError, setFormulaError] = useState('')
 
-  // Current basis data for the selected basis set
-  const currentBasisData = useMemo(
-    () => basisSetData.data[selectedBasis] || {},
-    [selectedBasis]
-  )
+  // Lazy-loaded basis data cache: { [basisName]: elementsData }
+  const basisCache = useRef({})
+  const [currentBasisData, setCurrentBasisData] = useState(null)
+  const [loadingBasis, setLoadingBasis] = useState(false)
 
   const currentBasisMeta = useMemo(
-    () => basisSetData.basisSets.find(b => b.name === selectedBasis),
+    () => basisSetMeta.basisSets.find(b => b.name === selectedBasis),
     [selectedBasis]
   )
 
   const supportedElements = currentBasisMeta?.elements || []
+
+  // Select a basis set and infer the default harmonic type at the same time
+  const handleSelectBasis = (name) => {
+    const meta = basisSetMeta.basisSets.find(b => b.name === name)
+    setSelectedBasis(name)
+    if (meta?.default_harmonic === 'spherical') setSpherical(true)
+    else if (meta?.default_harmonic === 'cartesian') setSpherical(false)
+    // 'unspecified' → leave current user preference unchanged
+  }
+
+  // Lazy-fetch element data for the selected basis
+  useEffect(() => {
+    if (!currentBasisMeta) return
+    const { id, name } = currentBasisMeta
+
+    // Already cached?
+    if (basisCache.current[name]) {
+      setCurrentBasisData(basisCache.current[name])
+      return
+    }
+
+    setLoadingBasis(true)
+    fetch(`/data/basis/${id}.json`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(data => {
+        basisCache.current[name] = data
+        setCurrentBasisData(data)
+      })
+      .catch(err => {
+        console.error('Failed to load basis data:', err)
+        setCurrentBasisData({})
+      })
+      .finally(() => setLoadingBasis(false))
+  }, [currentBasisMeta])
 
   // Atom manipulation
   const addAtom = (symbol) => {
@@ -40,16 +76,11 @@ export default function App() {
       : [...prev, { symbol, count: 1 }]
     )
   }
-
-  const removeAtom = (symbol) => {
-    setAtoms(prev => prev.filter(a => a.symbol !== symbol))
-  }
-
-  const updateCount = (symbol, count) => {
+  const removeAtom = (symbol) => setAtoms(prev => prev.filter(a => a.symbol !== symbol))
+  const updateCount = (symbol, count) =>
     setAtoms(prev => prev.map(a => a.symbol === symbol ? { ...a, count } : a))
-  }
 
-  // Formula parser input
+  // Formula parser
   const handleFormulaSubmit = (e) => {
     e.preventDefault()
     const parsed = parseMolecularFormula(formulaInput)
@@ -81,7 +112,7 @@ export default function App() {
               <p className="text-xs text-slate-400 mt-0.5">Size of basis for any chemical system</p>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto">
             <a
               href="https://www.basissetexchange.org/"
               target="_blank"
@@ -104,7 +135,7 @@ export default function App() {
           </h2>
           <p className="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
             Select a basis set, add the atoms in your molecule, and instantly see the total
-            number of basis functions — broken down by element and shell type.
+            number of basis functions — plus occupied and virtual orbital counts.
           </p>
         </div>
 
@@ -119,15 +150,27 @@ export default function App() {
                 1 · Basis Set
               </h3>
               <BasisSetSelector
-                basisSets={basisSetData.basisSets}
+                basisSets={basisSetMeta.basisSets}
                 selectedBasis={selectedBasis}
-                onSelect={setSelectedBasis}
+                onSelect={handleSelectBasis}
               />
               {currentBasisMeta && (
-                <p className="text-xs text-slate-500 leading-snug">
-                  {currentBasisMeta.description}.{' '}
-                  Supports {supportedElements.length} element{supportedElements.length !== 1 ? 's' : ''} (H–Kr).
-                </p>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-500">
+                    {currentBasisMeta.description || `${currentBasisMeta.family} basis set`}.
+                  </span>
+                  <span className="text-slate-600">
+                    {supportedElements.length} element{supportedElements.length !== 1 ? 's' : ''} (H–Kr).
+                  </span>
+                  {currentBasisMeta.default_harmonic !== 'unspecified' && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold
+                      ${currentBasisMeta.default_harmonic === 'spherical'
+                        ? 'bg-teal-900/50 text-teal-300'
+                        : 'bg-amber-900/50 text-amber-300'}`}>
+                      {currentBasisMeta.default_harmonic === 'spherical' ? 'Spherical' : 'Cartesian'} default
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -137,7 +180,6 @@ export default function App() {
                 2 · Molecule / Atoms
               </h3>
 
-              {/* Formula input */}
               <form onSubmit={handleFormulaSubmit} className="flex gap-2">
                 <input
                   type="text"
@@ -155,14 +197,10 @@ export default function App() {
                   Parse
                 </button>
               </form>
-              {formulaError && (
-                <p className="text-xs text-red-400">{formulaError}</p>
-              )}
+              {formulaError && <p className="text-xs text-red-400">{formulaError}</p>}
 
-              {/* Presets */}
               <MoleculePresets onSelect={handlePreset} />
 
-              {/* Manual atom input */}
               <div>
                 <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">
                   Or add atoms manually
@@ -177,13 +215,19 @@ export default function App() {
               </div>
             </div>
 
-            {/* Education */}
             <EducationPanel />
           </div>
 
           {/* Right panel: results */}
           <div className="lg:col-span-3">
-            {atoms.length === 0 || !selectedBasis ? (
+            {loadingBasis ? (
+              <div className="rounded-2xl bg-slate-900/40 border border-slate-800 h-64
+                              flex flex-col items-center justify-center text-center px-8">
+                <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent
+                                animate-spin mb-3" />
+                <p className="text-slate-400 text-sm">Loading basis set data…</p>
+              </div>
+            ) : atoms.length === 0 || !selectedBasis || !currentBasisData ? (
               <div className="rounded-2xl bg-slate-900/40 border border-slate-800 h-64
                               flex flex-col items-center justify-center text-center px-8">
                 <div className="text-4xl mb-3">⚗️</div>
@@ -215,10 +259,10 @@ export default function App() {
                className="text-indigo-400 hover:text-indigo-300">
               Basis Set Exchange
             </a>{' '}
-            (MolSSI). Counts use spherical harmonics by default.
+            (MolSSI) — {basisSetMeta.basisSets.length} basis sets, H–Kr.
           </p>
           <p className="text-xs text-slate-600">
-            Static web app — no backend, all data bundled.
+            Static web app — no backend. Basis data loaded on demand.
           </p>
         </div>
       </footer>
