@@ -53,7 +53,7 @@ export default function App() {
     }
 
     setLoadingBasis(true)
-    fetch(`/data/basis/${id}.json`)
+    fetch(`${import.meta.env.BASE_URL}data/basis/${id}.json`)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
