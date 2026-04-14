@@ -174,6 +174,9 @@ for idx, bs_name in enumerate(orbital_bs):
         sym = ELEMENT_SYMBOLS[z]
         sph  = count_functions(elem_bse, spherical=True)
         cart = count_functions(elem_bse, spherical=False)
+        # Skip elements that have no electron shells (e.g. ECP-only entries)
+        if sph['total_funcs'] == 0:
+            continue
         elements_data[sym] = {
             'z': z,
             'name': ELEMENT_NAMES.get(z, sym),

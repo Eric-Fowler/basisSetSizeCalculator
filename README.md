@@ -4,9 +4,9 @@ A static web application for calculating the number of basis functions in a quan
 
 ## Features
 
-- **23 common basis sets**: cc-pVDZ/TZ/QZ/5Z, aug-cc-pVDZ/TZ/QZ/5Z, 6-31G/6-311G (and starred variants), def2-SVP/TZVP/TZVPP/QZVP/QZVPP, STO-3G, 3-21G
+- **622 basis sets** from the Basis Set Exchange: Pople, Dunning (cc-pV*Z), Ahlrichs (def2-*), ANO, Jensen, and many more
 - **36 elements** supported: H through Kr (Z = 1–36)
-- **Instant calculation** — all basis set data is bundled into the build; no backend or API calls
+- **Instant calculation** — basis metadata is bundled at build time; per-basis shell data is loaded on demand
 - **Educational breakdown** per atom: shell types (s, p, d, f…), contracted vs primitive counts, angular momentum explained
 - **Spherical harmonics** (5d, 7f…) or **Cartesian** (6d, 10f…) toggle
 - **Formula parser** — type `H2O`, `C6H6`, `Fe(CO)5` and the atoms are parsed automatically
@@ -26,7 +26,11 @@ The `dist/` folder contains a self-contained static site ready to deploy on GitH
 
 ## Data
 
-Basis set data is sourced from the [Basis Set Exchange](https://www.basissetexchange.org/) (MolSSI BSE) via the [`basis_set_exchange`](https://pypi.org/project/basis-set-exchange/) Python package and pre-generated into `src/data/basisSetData.json` at build time. The generation script is at `scripts/generate_basis_data.py`.
+Basis set data is sourced from the [Basis Set Exchange](https://www.basissetexchange.org/) (MolSSI BSE) via the [`basis_set_exchange`](https://pypi.org/project/basis-set-exchange/) Python package and pre-generated as static JSON payloads. The generation script is at `scripts/generate_basis_data.py`.
+
+Two output artifacts are produced:
+- `src/data/basisSetMeta.json` — lightweight metadata (basis name, family, supported elements, default harmonic type) bundled into the app at build time
+- `public/data/basis/*.json` — per-basis element/shell data loaded lazily at runtime when the user selects a basis set; in production builds these are shipped as `dist/data/basis/*.json`
 
 ## Tech Stack
 
