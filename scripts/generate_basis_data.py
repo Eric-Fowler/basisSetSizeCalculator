@@ -233,13 +233,11 @@ for idx, bs_name in enumerate(orbital_bs):
         jkfit_name = JKFIT_FALLBACK_NAME
         jkfit_funcs = count_aux_functions(JKFIT_FALLBACK_NAME, element_zs)
 
-    # Attach auxiliary function counts to element data
+    # Attach auxiliary function counts to element data (always present for consistent schema)
     for sym, edata in elements_data.items():
         z = edata['z']
-        if z in jkfit_funcs:
-            edata['aux_jkfit_funcs'] = jkfit_funcs[z]
-        if z in rifit_funcs:
-            edata['aux_rifit_funcs'] = rifit_funcs[z]
+        edata['aux_jkfit_funcs'] = jkfit_funcs.get(z)
+        edata['aux_rifit_funcs'] = rifit_funcs.get(z)
 
     # Write per-basis data file
     data_file = os.path.join(basis_dir, f'{idx}.json')
