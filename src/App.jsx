@@ -87,7 +87,7 @@ export default function App() {
     () => findSimilarBasisSets(DEFAULT_BASIS, 3)
   )
   const [comparisonBasisData, setComparisonBasisData] = useState({})
-  const [selectedMethod, setSelectedMethod] = useState('DFT')
+  const [selectedMethod, setSelectedMethod] = useState('DFT (Hybrid)')
 
   // Lazy-loaded basis data cache: { [basisName]: elementsData }
   const basisCache = useRef({})
@@ -206,8 +206,14 @@ export default function App() {
   const comparisonRowsWithCost = comparisonRows.map(row => ({
     ...row,
     isReference: row.title === '1 · Basis Set' && row.name === referenceBasisName,
-    relativeCost: row.totalFunctions !== null && referenceFunctions > 0
+    relativeCost: row.totalFunctions !== null && referenceFunctions > 0 && methodScaling !== undefined
       ? (row.totalFunctions / referenceFunctions) ** methodScaling
+      : null,
+    relativeCostRange: row.totalFunctions !== null && referenceFunctions > 0 && methodScaling !== undefined
+      ? [
+          (row.totalFunctions / referenceFunctions) ** (methodScaling - 0.5),
+          (row.totalFunctions / referenceFunctions) ** (methodScaling + 0.5),
+        ].sort((left, right) => left - right)
       : null,
   }))
 
@@ -483,9 +489,10 @@ export default function App() {
                     ))}
                   </div>
 
-                  <section className="lg:col-span-2 rounded-2xl bg-slate-900/60 border border-slate-700 p-5">
-                    <div className="overflow-x-auto lg:overflow-x-visible">
-                      <table className="w-full text-left">
+                  <div className="lg:col-span-2 space-y-5">
+                    <section className="rounded-2xl bg-slate-900/60 border border-slate-700 p-5">
+                      <div className="overflow-x-auto lg:overflow-x-visible">
+                        <table className="w-full text-left">
                         <thead>
                           <tr className="border-b border-slate-700">
                             <th scope="col" className="pb-3 pr-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Basis set</th>
@@ -494,7 +501,7 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {comparisonRowsWithCost.map(({ title, name, totalFunctions, unsupportedAtoms, relativeCost, isReference }) => (
+                          {comparisonRowsWithCost.map(({ title, name, totalFunctions, unsupportedAtoms, relativeCost, relativeCostRange, isReference }) => (
                             <tr key={title} className="border-b border-slate-700/50 last:border-0">
                               <th
                                 scope="row"
@@ -520,19 +527,37 @@ export default function App() {
                                 className={`py-3 pl-3 text-right tabular-nums font-semibold text-teal-300 ${isReference ? 'rounded-r-xl bg-indigo-500/10' : ''}`}
                                 style={isReference ? { boxShadow: '8px 0 0 0 rgb(99 102 241 / 0.1)' } : undefined}
                               >
-                                {relativeCost !== null ? `${relativeCost.toFixed(1)}x` : '—'}
+                                {relativeCost !== null ? (
+                                  <span className="inline-flex flex-col items-end">
+                                    <span>{relativeCost.toFixed(1)}x</span>
+                                    {!isReference && (
+                                      <span className="text-[10px] font-normal text-slate-500">
+                                        {relativeCostRange[0].toFixed(1)}–{relativeCostRange[1].toFixed(1)}x
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : '—'}
                               </td>
                             </tr>
                           ))}
                         </tbody>
-                      </table>
-                    </div>
-                  </section>
+                        </table>
+                      </div>
+                    </section>
+
+                    <section aria-label="Approach notes" className="rounded-2xl bg-slate-900/60 border border-slate-700 p-5 min-h-24">
+                      <p className="text-sm text-slate-300 text-justify">
+                        The calculator estimates the relative cost between different basis sets with 
+                        N<sub>1</sub> and N<sub>2</sub> basis functions as (N<sub>1</sub>/N<sub>2</sub>)<sup>K</sup>, where K is the
+                        approximate scaling (<i>O</i>(<i>N</i><sup>K</sup>)) of the selected model chemistry. Error ranges are given by
+                        an uncertainty of ±0.5 on K. These values are crude estimates and should be only taken as a loose reference.
+                      </p>
+                    </section>
+                  </div>
                 </div>
               </main>
       )}
-
-
+      
       {/* Footer */}
       <footer className="border-t border-slate-800 mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-4">

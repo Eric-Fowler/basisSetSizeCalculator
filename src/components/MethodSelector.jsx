@@ -1,21 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
 
+// Effective exponents for changing the basis set on a fixed molecule.
+// Intended only for crude relative-cost estimates:
+// costRatio = (nbf2 / nbf1) ** exponent
+
 export const METHODS = [
-  { id: 'HF', exponent: 2 },
-  { id: 'DFT', exponent: 2 },
-  { id: 'RI-DFT', exponent: 2.5 },
-  { id: 'TD-DFT (Local/TDA)', exponent: 2.5 },
-  { id: 'TD-DFT (Canonical)', exponent: 4 },
-  { id: 'Local-MP2 (DF-LMP2)', exponent: 1 },
-  { id: 'MP2 (Canonical)', exponent: 5 },
-  { id: 'RI-MP2', exponent: 5 },
-  { id: 'MP3', exponent: 6 },
-  { id: 'MP4', exponent: 7 },
-  { id: 'CISD', exponent: 6 },
-  { id: 'DLPNO-CCSD', exponent: 2 },
-  { id: 'CCSD (Canonical)', exponent: 6 },
-  { id: 'DLPNO-CCSD(T)', exponent: 1 },
-  { id: 'CCSD(T) (Canonical)', exponent: 7 },
+  { id: 'HF', exponent: 3.5 },
+
+  { id: 'DFT (Semilocal)', exponent: 2.5 },
+  { id: 'DFT (Hybrid)', exponent: 3.5 },
+
+  { id: 'TD-DFT/TDA (Semilocal, Iterative)', exponent: 2.5 },
+  { id: 'TD-DFT/TDA (Hybrid, Iterative)', exponent: 3.5 },
+  { id: 'TD-DFT (Full Matrix / All Roots)', exponent: 3.5 },
+
+  { id: 'Local-MP2 (DF-LMP2)', exponent: 2.5 },
+  { id: 'MP2 (Canonical)', exponent: 4 },
+  { id: 'RI-MP2', exponent: 3 },
+
+  { id: 'MP3', exponent: 4 },
+  { id: 'MP4', exponent: 4 },
+  { id: 'CISD', exponent: 4 },
+
+  { id: 'DLPNO-CCSD', exponent: 3 },
+  { id: 'CCSD (Canonical)', exponent: 4 },
+
+  { id: 'DLPNO-CCSD(T)', exponent: 3 },
+  { id: 'CCSD(T) (Canonical)', exponent: 4 },
 ];
 function MethodLabel({ method }) {
   return (
