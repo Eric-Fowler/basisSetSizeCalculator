@@ -6,7 +6,7 @@ import ResultsDisplay from './components/ResultsDisplay'
 import EducationPanel from './components/EducationPanel'
 import MoleculePresets from './components/MoleculePresets'
 import MethodSelector, { METHODS } from './components/MethodSelector'
-import { parseMolecularFormula } from './utils/formulaParser'
+import { parseMolecularFormula, parseXYZ } from './utils/formulaParser'
 
 const DEFAULT_BASIS = 'cc-pVDZ'
 const DEFAULT_ATOMS = [
@@ -81,6 +81,8 @@ export default function App() {
   const [spherical, setSpherical] = useState(true)
   const [formulaInput, setFormulaInput] = useState('')
   const [formulaError, setFormulaError] = useState('')
+  const [xyzInput, setXyzInput] = useState('')
+  const [xyzError, setXyzError] = useState('')
   const [additionalBasisSelections, setAdditionalBasisSelections] = useState(
     () => findSimilarBasisSets(DEFAULT_BASIS, 3)
   )
@@ -153,6 +155,18 @@ export default function App() {
     setFormulaInput('')
   }
 
+  const handleXYZSubmit = (e) => {
+    e.preventDefault()
+    const parsed = parseXYZ(xyzInput)
+    if (!parsed.length) {
+      setXyzError('Could not parse XYZ block. Include atom symbols and three coordinates per atom.')
+      return
+    }
+    setXyzError('')
+    setAtoms(parsed)
+    setXyzInput('')
+  }
+
   const handlePreset = (formula) => {
     const parsed = parseMolecularFormula(formula)
     if (parsed.length) setAtoms(parsed)
@@ -160,15 +174,13 @@ export default function App() {
 
   const [activePanel, setActivePanel] = useState(1)
   const basisPanels = [
-    { title: '1 · Basis Set', selectedBasis, onSelect: handleSelectBasis },
+    { title: '1 · Basis Set', selectedBasis, onSelect: updateSelectedBasis },
     ...additionalBasisSelections.map((name, index) => ({
       title: `${index + 2} · Basis Set`,
       selectedBasis: name,
-      onSelect: index === 0
-        ? updateSelectedBasis
-        : selectedName => setAdditionalBasisSelections(current =>
-            current.map((basisName, currentIndex) => currentIndex === index ? selectedName : basisName)
-          ),
+      onSelect: selectedName => setAdditionalBasisSelections(current =>
+        current.map((basisName, currentIndex) => currentIndex === index ? selectedName : basisName)
+      ),
     })),
   ]
   const comparisonRows = basisPanels.map(({ title, selectedBasis: name }) => {
@@ -349,6 +361,31 @@ export default function App() {
                 </button>
               </form>
               {formulaError && <p className="text-xs text-red-400">{formulaError}</p>}
+
+              <form onSubmit={handleXYZSubmit} className="space-y-2 border-t border-slate-700 pt-4">
+                <label htmlFor="xyz-input" className="block text-xs text-slate-500 font-medium uppercase tracking-wider">
+                  Or paste an XYZ block
+                </label>
+                <textarea
+                  id="xyz-input"
+                  value={xyzInput}
+                  onChange={event => { setXyzInput(event.target.value); setXyzError('') }}
+                  placeholder={'3\nWater molecule\nO 0.000 0.000 0.000\nH 0.758 0.000 0.504\nH -0.758 0.000 0.504'}
+                  rows={5}
+                  className="w-full resize-y rounded-lg bg-slate-800 border border-slate-600 px-3 py-2
+                             font-mono text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+                {xyzError && <p role="alert" className="text-xs text-red-400">{xyzError}</p>}
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500
+                               text-white text-sm font-medium transition-colors"
+                  >
+                    Parse XYZ
+                  </button>
+                </div>
+              </form>
 
               <MoleculePresets onSelect={handlePreset} />
 
