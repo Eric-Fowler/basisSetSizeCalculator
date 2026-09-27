@@ -19,6 +19,11 @@ export default function App() {
   const [spherical, setSpherical] = useState(true)
   const [formulaInput, setFormulaInput] = useState('')
   const [formulaError, setFormulaError] = useState('')
+  const [additionalBasisSelections, setAdditionalBasisSelections] = useState([
+    DEFAULT_BASIS,
+    DEFAULT_BASIS,
+    DEFAULT_BASIS,
+  ])
 
   // Lazy-loaded basis data cache: { [basisName]: elementsData }
   const basisCache = useRef({})
@@ -99,6 +104,16 @@ export default function App() {
   }
 
   const [activePanel, setActivePanel] = useState(1)
+  const basisPanels = [
+    { title: '1 · Basis Set', selectedBasis, onSelect: handleSelectBasis },
+    ...additionalBasisSelections.map((name, index) => ({
+      title: `${index + 2} · Basis Set`,
+      selectedBasis: name,
+      onSelect: selectedName => setAdditionalBasisSelections(current =>
+        current.map((basisName, currentIndex) => currentIndex === index ? selectedName : basisName)
+      ),
+    })),
+  ]
 
   return (
     <div className="min-h-screen bg-[#0f172a]">
@@ -280,7 +295,43 @@ export default function App() {
         </>
 
             ) : (
-        <div aria-label="Panel 2" />
+              <main aria-label="Panel 2" className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
+                {basisPanels.map(({ title, selectedBasis: panelBasis, onSelect }) => {
+                  const panelBasisMeta = basisSetMeta.basisSets.find(basis => basis.name === panelBasis)
+                  const panelSupportedElements = panelBasisMeta?.elements || []
+
+                  return (
+                    <section key={title} className="rounded-2xl bg-slate-900/60 border border-slate-700 p-5 space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                        {title}
+                      </h3>
+                      <BasisSetSelector
+                        basisSets={basisSetMeta.basisSets}
+                        selectedBasis={panelBasis}
+                        onSelect={onSelect}
+                      />
+                      {panelBasisMeta && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-slate-500">
+                            {panelBasisMeta.description || `${panelBasisMeta.family} basis set`}.
+                          </span>
+                          <span className="text-slate-600">
+                            {panelSupportedElements.length} element{panelSupportedElements.length !== 1 ? 's' : ''} (H–Kr).
+                          </span>
+                          {panelBasisMeta.default_harmonic !== 'unspecified' && (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold
+                              ${panelBasisMeta.default_harmonic === 'spherical'
+                                ? 'bg-teal-900/50 text-teal-300'
+                                : 'bg-amber-900/50 text-amber-300'}`}>
+                              {panelBasisMeta.default_harmonic === 'spherical' ? 'Spherical' : 'Cartesian'} default
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )
+                })}
+              </main>
       )}
 
 
@@ -300,7 +351,7 @@ export default function App() {
           </p>
         </div>
       </footer>
-      
+
     </div>
   )
 }
