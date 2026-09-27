@@ -98,8 +98,12 @@ export default function App() {
     if (parsed.length) setAtoms(parsed)
   }
 
+  const [activePanel, setActivePanel] = useState(1)
+
   return (
     <div className="min-h-screen bg-[#0f172a]">
+
+
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur-sm sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
@@ -125,6 +129,29 @@ export default function App() {
         </div>
       </header>
 
+      <nav aria-label="Main panels" className="flex justify-center gap-2 border-b border-slate-800 px-4 py-3">
+        {[
+          { id: 1, name: 'Basis Set Size' },
+          { id: 2, name: 'Relative Computational Cost' },
+        ].map(panel => (
+          <button
+            key={panel.id}
+            type="button"
+            aria-pressed={activePanel === panel.id}
+            onClick={() => setActivePanel(panel.id)}
+            className={`px-3 py-2 text-sm ${
+              activePanel === panel.id
+                ? 'text-white border-b-2 border-indigo-500'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            {panel.name}
+          </button>
+        ))}
+      </nav>
+        {activePanel === 1 ? (
+          <>
+      
       {/* Main */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
@@ -250,6 +277,13 @@ export default function App() {
         </div>
       </main>
 
+        </>
+
+            ) : (
+        <div aria-label="Panel 2" />
+      )}
+
+
       {/* Footer */}
       <footer className="border-t border-slate-800 mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-4">
@@ -266,6 +300,7 @@ export default function App() {
           </p>
         </div>
       </footer>
+      
     </div>
   )
 }
