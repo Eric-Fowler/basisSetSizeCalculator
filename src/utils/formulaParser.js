@@ -83,3 +83,39 @@ export function parseMolecularFormula(formula) {
     .map(([symbol, count]) => ({ symbol, count }))
     .sort((a, b) => a.symbol.localeCompare(b.symbol))
 }
+
+export function parseXYZ(xyzBlock) {
+  if (!xyzBlock || !xyzBlock.trim()) return []
+
+  const lines = xyzBlock.replace(/^\uFEFF/, '').split(/\r?\n/)
+  const firstLine = lines[0].trim()
+  const declaredAtomCount = /^\d+$/.test(firstLine) ? Number(firstLine) : null
+  let atomLines = lines
+
+  if (declaredAtomCount !== null) {
+    const secondLineIsAtom = /^[A-Z][a-z]?\s+[-+\d.]/.test(lines[1]?.trim() || '')
+    atomLines = lines.slice(secondLineIsAtom ? 1 : 2)
+  }
+
+  const counts = new Map()
+  let parsedAtomCount = 0
+
+  for (const line of atomLines) {
+    const trimmedLine = line.trim()
+    if (!trimmedLine) continue
+
+    const fields = trimmedLine.split(/\s+/)
+    const [symbol, ...coordinates] = fields
+    if (!/^[A-Z][a-z]?$/.test(symbol) || coordinates.length < 3) return []
+    if (!coordinates.slice(0, 3).every(value => Number.isFinite(Number(value)))) return []
+
+    counts.set(symbol, (counts.get(symbol) || 0) + 1)
+    parsedAtomCount += 1
+  }
+
+  if (parsedAtomCount === 0 || (declaredAtomCount !== null && parsedAtomCount !== declaredAtomCount)) return []
+
+  return [...counts.entries()]
+    .map(([symbol, count]) => ({ symbol, count }))
+    .sort((left, right) => left.symbol.localeCompare(right.symbol))
+}
