@@ -5,6 +5,7 @@ import AtomInput from './components/AtomInput'
 import ResultsDisplay from './components/ResultsDisplay'
 import EducationPanel from './components/EducationPanel'
 import MoleculePresets from './components/MoleculePresets'
+import MethodSelector, { METHODS } from './components/MethodSelector'
 import { parseMolecularFormula } from './utils/formulaParser'
 
 const DEFAULT_BASIS = 'cc-pVDZ'
@@ -13,17 +14,78 @@ const DEFAULT_ATOMS = [
   { symbol: 'H', count: 4 },
 ]
 
+function loadBasisData(meta, cache) {
+  if (cache.current[meta.name]) return Promise.resolve(cache.current[meta.name])
+
+  const request = fetch(`${import.meta.env.BASE_URL}data/basis/${meta.id}.json`)
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    })
+    .then(data => {
+      cache.current[meta.name] = data
+      return data
+    })
+    .catch(error => {
+      delete cache.current[meta.name]
+      throw error
+    })
+
+  cache.current[meta.name] = request
+  return request
+}
+
+function stringDistance(left, right) {
+  const previousRow = Array.from({ length: right.length + 1 }, (_, index) => index)
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = previousRow[0]
+    previousRow[0] = leftIndex
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const previous = previousRow[rightIndex]
+      previousRow[rightIndex] = Math.min(
+        previousRow[rightIndex] + 1,
+        previousRow[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+      )
+      diagonal = previous
+    }
+  }
+
+  return previousRow[right.length]
+}
+
+function findSimilarBasisSets(name, count) {
+  const normalizedName = name.toLowerCase()
+
+  return basisSetMeta.basisSets
+    .filter(basis => basis.name !== name)
+    .map((basis, index) => {
+      const normalizedCandidate = basis.name.toLowerCase()
+      const distance = stringDistance(normalizedName, normalizedCandidate)
+      return {
+        name: basis.name,
+        score: distance / Math.max(normalizedName.length, normalizedCandidate.length, 1),
+        index,
+      }
+    })
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .slice(0, count)
+    .map(basis => basis.name)
+}
+
 export default function App() {
   const [selectedBasis, setSelectedBasis] = useState(DEFAULT_BASIS)
   const [atoms, setAtoms] = useState(DEFAULT_ATOMS)
   const [spherical, setSpherical] = useState(true)
   const [formulaInput, setFormulaInput] = useState('')
   const [formulaError, setFormulaError] = useState('')
-  const [additionalBasisSelections, setAdditionalBasisSelections] = useState([
-    DEFAULT_BASIS,
-    DEFAULT_BASIS,
-    DEFAULT_BASIS,
-  ])
+  const [additionalBasisSelections, setAdditionalBasisSelections] = useState(
+    () => findSimilarBasisSets(DEFAULT_BASIS, 3)
+  )
+  const [comparisonBasisData, setComparisonBasisData] = useState({})
+  const [selectedMethod, setSelectedMethod] = useState('DFT')
 
   // Lazy-loaded basis data cache: { [basisName]: elementsData }
   const basisCache = useRef({})
@@ -38,7 +100,7 @@ export default function App() {
   const supportedElements = currentBasisMeta?.elements || []
 
   // Select a basis set and infer the default harmonic type at the same time
-  const handleSelectBasis = (name) => {
+  const updateSelectedBasis = (name) => {
     const meta = basisSetMeta.basisSets.find(b => b.name === name)
     setSelectedBasis(name)
     if (meta?.default_harmonic === 'spherical') setSpherical(true)
@@ -46,32 +108,25 @@ export default function App() {
     // 'unspecified' → leave current user preference unchanged
   }
 
+  const handleSelectBasis = (name) => {
+    if (name === selectedBasis) return
+    updateSelectedBasis(name)
+    setAdditionalBasisSelections(findSimilarBasisSets(name, additionalBasisSelections.length))
+  }
+
   // Lazy-fetch element data for the selected basis
   useEffect(() => {
     if (!currentBasisMeta) return
-    const { id, name } = currentBasisMeta
-
-    // Already cached?
-    if (basisCache.current[name]) {
-      setCurrentBasisData(basisCache.current[name])
-      return
-    }
-
+    let isCurrent = true
     setLoadingBasis(true)
-    fetch(`${import.meta.env.BASE_URL}data/basis/${id}.json`)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then(data => {
-        basisCache.current[name] = data
-        setCurrentBasisData(data)
-      })
+    loadBasisData(currentBasisMeta, basisCache)
+      .then(data => { if (isCurrent) setCurrentBasisData(data) })
       .catch(err => {
         console.error('Failed to load basis data:', err)
-        setCurrentBasisData({})
+        if (isCurrent) setCurrentBasisData({})
       })
-      .finally(() => setLoadingBasis(false))
+      .finally(() => { if (isCurrent) setLoadingBasis(false) })
+    return () => { isCurrent = false }
   }, [currentBasisMeta])
 
   // Atom manipulation
@@ -109,11 +164,65 @@ export default function App() {
     ...additionalBasisSelections.map((name, index) => ({
       title: `${index + 2} · Basis Set`,
       selectedBasis: name,
-      onSelect: selectedName => setAdditionalBasisSelections(current =>
-        current.map((basisName, currentIndex) => currentIndex === index ? selectedName : basisName)
-      ),
+      onSelect: index === 0
+        ? updateSelectedBasis
+        : selectedName => setAdditionalBasisSelections(current =>
+            current.map((basisName, currentIndex) => currentIndex === index ? selectedName : basisName)
+          ),
     })),
   ]
+  const comparisonRows = basisPanels.map(({ title, selectedBasis: name }) => {
+    const data = comparisonBasisData[name]
+    const unsupportedAtoms = data ? atoms.filter(({ symbol }) => !data[symbol]) : []
+    const totalFunctions = data && unsupportedAtoms.length === 0
+      ? atoms.reduce((total, { symbol, count }) => {
+          const elementData = data[symbol]
+          return total + (spherical ? elementData.total_funcs_sph : elementData.total_funcs_cart) * count
+        }, 0)
+      : null
+
+    return { title, name, totalFunctions, unsupportedAtoms }
+  }).sort((left, right) => {
+    if (left.totalFunctions === null) return right.totalFunctions === null ? 0 : 1
+    if (right.totalFunctions === null) return -1
+    return left.totalFunctions - right.totalFunctions
+  })
+  const referenceBasisName = selectedBasis
+  const referenceRow = comparisonRows.find(row => row.title === '1 · Basis Set' && row.name === referenceBasisName)
+  const referenceFunctions = referenceRow?.totalFunctions
+  const methodScaling = METHODS.find(method => method.id === selectedMethod)?.exponent
+  const comparisonRowsWithCost = comparisonRows.map(row => ({
+    ...row,
+    isReference: row.title === '1 · Basis Set' && row.name === referenceBasisName,
+    relativeCost: row.totalFunctions !== null && referenceFunctions > 0
+      ? (row.totalFunctions / referenceFunctions) ** methodScaling
+      : null,
+  }))
+
+  useEffect(() => {
+    let isCurrent = true
+    const uniqueBasisNames = [...new Set([selectedBasis, ...additionalBasisSelections])]
+    const selectedMetas = uniqueBasisNames
+      .map(name => basisSetMeta.basisSets.find(basis => basis.name === name))
+      .filter(Boolean)
+
+    Promise.all(selectedMetas.map(meta =>
+      loadBasisData(meta, basisCache)
+        .then(data => [meta.name, data])
+        .catch(error => {
+          console.error(`Failed to load basis data for ${meta.name}:`, error)
+          return [meta.name, null]
+        })
+    )).then(entries => {
+      if (!isCurrent) return
+      setComparisonBasisData(current => ({
+        ...current,
+        ...Object.fromEntries(entries),
+      }))
+    })
+
+    return () => { isCurrent = false }
+  }, [selectedBasis, additionalBasisSelections])
 
   return (
     <div className="min-h-screen bg-[#0f172a]">
@@ -295,42 +404,94 @@ export default function App() {
         </>
 
             ) : (
-              <main aria-label="Panel 2" className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-5">
-                {basisPanels.map(({ title, selectedBasis: panelBasis, onSelect }) => {
-                  const panelBasisMeta = basisSetMeta.basisSets.find(basis => basis.name === panelBasis)
-                  const panelSupportedElements = panelBasisMeta?.elements || []
+              <main aria-label="Panel 2" className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+                <div className="text-center mb-8">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Reference molecule</p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+                    <h2 className="text-3xl font-bold text-white" aria-label={`Formula ${atoms.map(({ symbol, count }) => `${symbol}${count > 1 ? count : ''}`).join('')}`}>
+                      {atoms.length ? atoms.map(({ symbol, count }) => (
+                        <span key={symbol}>
+                          {symbol}{count > 1 && <sub className="text-xl text-slate-300">{count}</sub>}
+                        </span>
+                      )) : 'No atoms selected'}
+                    </h2>
+                    <div className="flex items-baseline gap-3 sm:border-l sm:border-slate-700 sm:pl-6">
+                      <span className="text-xs text-slate-500 uppercase tracking-wider">Scaling</span>
+                      <span className="text-xl font-semibold text-indigo-300">
+                        <i>O</i>(<i>N</i><sup>{methodScaling}</sup>)
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                  return (
-                    <section key={title} className="rounded-2xl bg-slate-900/60 border border-slate-700 p-5 space-y-3">
-                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-                        {title}
-                      </h3>
-                      <BasisSetSelector
-                        basisSets={basisSetMeta.basisSets}
-                        selectedBasis={panelBasis}
-                        onSelect={onSelect}
-                      />
-                      {panelBasisMeta && (
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="text-slate-500">
-                            {panelBasisMeta.description || `${panelBasisMeta.family} basis set`}.
-                          </span>
-                          <span className="text-slate-600">
-                            {panelSupportedElements.length} element{panelSupportedElements.length !== 1 ? 's' : ''} (H–Kr).
-                          </span>
-                          {panelBasisMeta.default_harmonic !== 'unspecified' && (
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold
-                              ${panelBasisMeta.default_harmonic === 'spherical'
-                                ? 'bg-teal-900/50 text-teal-300'
-                                : 'bg-amber-900/50 text-amber-300'}`}>
-                              {panelBasisMeta.default_harmonic === 'spherical' ? 'Spherical' : 'Cartesian'} default
-                            </span>
-                          )}
-                        </div>
-                      )}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  <div className="lg:col-span-1 space-y-5">
+                    <section className="rounded-2xl bg-slate-900/60 border border-slate-700 p-3 space-y-2">
+                      <label htmlFor="comparison-method" className="block text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                        Method
+                      </label>
+                      <MethodSelector selectedMethod={selectedMethod} onSelect={setSelectedMethod} />
                     </section>
-                  )
-                })}
+                    {basisPanels.map(({ title, selectedBasis: panelBasis, onSelect }) => (
+                        <section key={title} className="rounded-2xl bg-slate-900/60 border border-slate-700 p-3 space-y-2">
+                          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+                            {title}
+                          </h3>
+                          <BasisSetSelector
+                            basisSets={basisSetMeta.basisSets}
+                            selectedBasis={panelBasis}
+                            onSelect={onSelect}
+                          />
+                        </section>
+                    ))}
+                  </div>
+
+                  <section className="lg:col-span-2 rounded-2xl bg-slate-900/60 border border-slate-700 p-5">
+                    <div className="overflow-x-auto lg:overflow-x-visible">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            <th scope="col" className="pb-3 pr-4 text-xs font-medium text-slate-500 uppercase tracking-wider">Basis set</th>
+                            <th scope="col" className="pb-3 px-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Basis functions</th>
+                            <th scope="col" className="pb-3 pl-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {comparisonRowsWithCost.map(({ title, name, totalFunctions, unsupportedAtoms, relativeCost, isReference }) => (
+                            <tr key={title} className="border-b border-slate-700/50 last:border-0">
+                              <th
+                                scope="row"
+                                className={`py-3 pr-4 text-left font-mono text-sm font-semibold text-white ${isReference ? 'rounded-l-xl bg-indigo-500/10' : ''}`}
+                                style={isReference ? { boxShadow: '-8px 0 0 0 rgb(99 102 241 / 0.1)' } : undefined}
+                              >
+                                {name}
+                              </th>
+                              <td className={`py-3 px-3 text-right tabular-nums ${isReference ? 'bg-indigo-500/10' : ''}`}>
+                                {totalFunctions !== null ? (
+                                  <span className="font-semibold text-indigo-300">{totalFunctions}</span>
+                                ) : comparisonBasisData[name] === null ? (
+                                  <span className="text-xs text-rose-400">Unavailable</span>
+                                ) : comparisonBasisData[name] ? (
+                                  <span className="text-xs text-amber-400">
+                                    Unsupported: {unsupportedAtoms.map(atom => atom.symbol).join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-500">Loading…</span>
+                                )}
+                              </td>
+                              <td
+                                className={`py-3 pl-3 text-right tabular-nums font-semibold text-teal-300 ${isReference ? 'rounded-r-xl bg-indigo-500/10' : ''}`}
+                                style={isReference ? { boxShadow: '8px 0 0 0 rgb(99 102 241 / 0.1)' } : undefined}
+                              >
+                                {relativeCost !== null ? `${relativeCost.toFixed(1)}x` : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
               </main>
       )}
 
